@@ -7,7 +7,7 @@ export default function Header() {
     <header className="w-full shadow-sm ">
       <div className="relative w-full h-auto ">
         <Image
-          src="/hotelHeader.png"
+          src="/main_header.png"
           alt="India International Coffee Festival 2026 - Coffee Board"
           width={1920}
           height={500}
