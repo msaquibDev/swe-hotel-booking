@@ -50,7 +50,7 @@ const bookingSchema = z.object({
   gst: z.string().optional(),
   checkinDate: z.string().min(1, "Check-in date is required"),
   checkoutDate: z.string().min(1, "Check-out date is required"),
-  roomType: z.enum(["single", "double"]),
+  roomType: z.string().min(1, "Please select a room type"),
   agreeToPolicy: z
     .boolean()
     .refine((val) => val === true, "You must agree to the booking policy"),
@@ -59,9 +59,10 @@ const bookingSchema = z.object({
 export default function BookingPage() {
   const [checkinDate, setCheckinDate] = useState<Date>();
   const [checkoutDate, setCheckoutDate] = useState<Date>();
-  const [roomType, setRoomType] = useState<"single" | "double">("single");
+  const [roomType, setRoomType] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hotel, setHotel] = useState<Hotel | null>(null);
+  console.log("Hotel data in booking page:", hotel);
   const [isScrolled, setIsScrolled] = useState(false);
 
   const searchParams = useSearchParams();
@@ -107,23 +108,26 @@ export default function BookingPage() {
 
   const watchedValues = watch();
 
-  const totalAmount = React.useMemo(() => {
-    if (!hotel) return 0;
+  const selectedRoom = React.useMemo(() => {
+    if (!hotel || !roomType) return null;
 
-    const selectedRoom = hotel.room_types?.find((r) =>
-      roomType === "single"
-        ? r.name.toLowerCase().includes("single")
-        : r.name.toLowerCase().includes("double")
-    );
+    return hotel.room_types?.find((room) => room.name === roomType) || null;
+  }, [hotel, roomType]);
+
+  const totalAmount = React.useMemo(() => {
     if (!selectedRoom) return 0;
+
     if (checkinDate && checkoutDate) {
       const nights = Math.ceil(
-        (checkoutDate.getTime() - checkinDate.getTime()) / (1000 * 60 * 60 * 24)
+        (checkoutDate.getTime() - checkinDate.getTime()) /
+          (1000 * 60 * 60 * 24),
       );
+
       return nights * selectedRoom.price;
     }
+
     return selectedRoom.price;
-  }, [checkinDate, checkoutDate, roomType, hotel]);
+  }, [checkinDate, checkoutDate, selectedRoom]);
 
   // ADD THIS ONSUBMIT FUNCTION
   const onSubmit = async (data: BookingFormData) => {
@@ -136,13 +140,12 @@ export default function BookingPage() {
 
     try {
       // Prepare booking data according to API requirements
-      const selectedRoom = hotel.room_types.find((r) =>
-        roomType === "single"
-          ? r.name.toLowerCase().includes("single")
-          : r.name.toLowerCase().includes("double")
+      const selectedRoom = hotel.room_types.find(
+        (room) => room.name === roomType,
       );
+
       if (!selectedRoom) {
-        throw new Error("Invalid room type selection");
+        throw new Error("Please select a valid room type");
       }
 
       const bookingData = {
@@ -173,7 +176,7 @@ export default function BookingPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(bookingData),
-        }
+        },
       );
 
       const result = await response.json();
@@ -205,7 +208,7 @@ export default function BookingPage() {
   const availableCheckinDates = hotel
     ? generateDates(
         new Date(hotel.checkin_start_date),
-        new Date(hotel.checkin_end_date)
+        new Date(hotel.checkin_end_date),
       )
     : [];
 
@@ -293,7 +296,7 @@ export default function BookingPage() {
             <div className="h-64 relative">
               <iframe
                 src={`https://maps.google.com/maps?q=${encodeURIComponent(
-                  `${hotel?.hotel_name}, ${hotel?.address}` || "Hotel Location"
+                  `${hotel?.hotel_name}, ${hotel?.address}` || "Hotel Location",
                 )}&z=15&output=embed`}
                 className="w-full h-full border-0"
                 loading="lazy"
@@ -514,7 +517,7 @@ export default function BookingPage() {
                         setCheckinDate(date);
                         setValue(
                           "checkinDate",
-                          date?.toISOString().split("T")[0] || ""
+                          date?.toISOString().split("T")[0] || "",
                         );
                         setCheckoutDate(undefined);
                         setValue("checkoutDate", "");
@@ -522,7 +525,7 @@ export default function BookingPage() {
                       placeholder="Select check-in date"
                       disabled={(date) =>
                         !availableCheckinDates.some(
-                          (d) => d.toDateString() === date.toDateString()
+                          (d) => d.toDateString() === date.toDateString(),
                         )
                       }
                     />
@@ -542,7 +545,7 @@ export default function BookingPage() {
                         setCheckoutDate(date);
                         setValue(
                           "checkoutDate",
-                          date?.toISOString().split("T")[0] || ""
+                          date?.toISOString().split("T")[0] || "",
                         );
                       }}
                       placeholder="Select check-out date"
@@ -550,7 +553,7 @@ export default function BookingPage() {
                         const allowedDates =
                           getAvailableCheckoutDates(checkinDate);
                         return !allowedDates.some(
-                          (d) => d.toDateString() === date.toDateString()
+                          (d) => d.toDateString() === date.toDateString(),
                         );
                       }}
                     />
@@ -566,11 +569,15 @@ export default function BookingPage() {
                 {/* Room Selection */}
                 <div className="space-y-4">
                   <Label>Room Type *</Label>
+
                   <RadioGroup
-                    defaultValue="single"
-                    onValueChange={(value: "single" | "double") => {
+                    value={roomType}
+                    onValueChange={(value) => {
                       setRoomType(value);
-                      setValue("roomType", value);
+                      setValue("roomType", value, {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                      });
                     }}
                     className="grid md:grid-cols-2 gap-4"
                   >
@@ -580,28 +587,36 @@ export default function BookingPage() {
                         className="flex items-center space-x-2"
                       >
                         <RadioGroupItem
-                          value={
-                            room.name.toLowerCase().includes("single")
-                              ? "single"
-                              : "double"
-                          }
-                          id={room.name}
+                          value={room.name}
+                          id={`room-${room.name}`}
                         />
+
                         <Label
-                          htmlFor={room.name}
-                          className="flex-1 p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                          htmlFor={`room-${room.name}`}
+                          className={`flex-1 p-4 border rounded-lg cursor-pointer transition-colors ${
+                            roomType === room.name
+                              ? "border-blue-600 bg-blue-50 ring-2 ring-blue-200"
+                              : "hover:bg-gray-50"
+                          }`}
                         >
                           <div className="flex justify-between items-center">
                             <div>
                               <div className="font-medium">{room.name}</div>
-                              {/* <div className="text-sm text-gray-500">
+
+                              <div className="text-sm text-gray-500 mt-1">
                                 {room.description}
-                              </div> */}
+                              </div>
+
+                              <div className="text-sm text-gray-500 mt-1">
+                                Up to {room.max_guests} guests
+                              </div>
                             </div>
-                            <div className="text-right">
+
+                            <div className="text-right ml-4">
                               <div className="font-bold text-lg">
                                 ₹{room.price}
                               </div>
+
                               <div className="text-sm text-gray-500">
                                 per night
                               </div>
@@ -611,6 +626,7 @@ export default function BookingPage() {
                       </div>
                     ))}
                   </RadioGroup>
+
                   {errors.roomType && (
                     <p className="text-red-500 text-sm">
                       {errors.roomType.message}
@@ -669,14 +685,24 @@ export default function BookingPage() {
                         <>
                           {`${Math.ceil(
                             (checkoutDate.getTime() - checkinDate.getTime()) /
-                              (1000 * 60 * 60 * 24)
-                          )} night(s) × ₹${
-                            hotel?.room_types?.find((r) =>
-                              roomType === "single"
-                                ? r.name.toLowerCase().includes("single")
-                                : r.name.toLowerCase().includes("double")
-                            )?.price || 0
-                          }`}
+                              (1000 * 60 * 60 * 24),
+                          )} night(s) × ₹${(
+                            <p className="opacity-90">
+                              {checkinDate && checkoutDate && selectedRoom ? (
+                                <>
+                                  {`${Math.ceil(
+                                    (checkoutDate.getTime() -
+                                      checkinDate.getTime()) /
+                                      (1000 * 60 * 60 * 24),
+                                  )} night(s) × ₹${selectedRoom.price}`}
+                                </>
+                              ) : selectedRoom ? (
+                                `₹${selectedRoom.price} per night`
+                              ) : (
+                                "Select room and dates for calculation"
+                              )}
+                            </p>
+                          )}`}
                         </>
                       ) : (
                         "Select dates for calculation"

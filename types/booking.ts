@@ -12,7 +12,7 @@ export interface BookingFormData {
   gst?: string;
   checkinDate: string;
   checkoutDate: string;
-  roomType: "single" | "double";
+  roomType: string;
   agreeToPolicy: boolean;
 }
 

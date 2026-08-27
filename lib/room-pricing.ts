@@ -14,11 +14,15 @@ export const roomTypes = {
 export const calculateBookingAmount = (
   checkinDate: string,
   checkoutDate: string,
-  roomType: 'single' | 'double'
+  roomType: "single" | "double",
 ): number => {
   const checkin = new Date(checkinDate);
   const checkout = new Date(checkoutDate);
-  const nights = Math.ceil((checkout.getTime() - checkin.getTime()) / (1000 * 60 * 60 * 24));
-  
-  return nights > 0 ? nights * roomTypes[roomType].price : roomTypes[roomType].price;
+  const nights = Math.ceil(
+    (checkout.getTime() - checkin.getTime()) / (1000 * 60 * 60 * 24),
+  );
+
+  return nights > 0
+    ? nights * roomTypes[roomType].price
+    : roomTypes[roomType].price;
 };
