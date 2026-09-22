@@ -1,3 +1,4 @@
+//app/booking-failure/page.tsx
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";

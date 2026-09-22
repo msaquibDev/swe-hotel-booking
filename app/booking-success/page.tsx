@@ -1,3 +1,4 @@
+//app/booking-success/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -29,7 +30,7 @@ export default function BookingSuccessPage() {
   const fetchBookingDetails = async (id: string) => {
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/booking/${id}`
+        `${process.env.NEXT_PUBLIC_API_URL}/api/booking/${id}`,
       );
       if (response.ok) {
         const booking = await response.json();
@@ -133,7 +134,7 @@ export default function BookingSuccessPage() {
                       <p className="text-sm text-gray-600">
                         {bookingDetails
                           ? new Date(
-                              bookingDetails.check_in_date
+                              bookingDetails.check_in_date,
                             ).toLocaleDateString()
                           : "N/A"}
                       </p>
@@ -146,7 +147,7 @@ export default function BookingSuccessPage() {
                       <p className="text-sm text-gray-600">
                         {bookingDetails
                           ? new Date(
-                              bookingDetails.check_out_date
+                              bookingDetails.check_out_date,
                             ).toLocaleDateString()
                           : "N/A"}
                       </p>
