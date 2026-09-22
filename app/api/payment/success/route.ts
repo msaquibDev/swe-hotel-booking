@@ -12,11 +12,11 @@ export async function GET(request: NextRequest) {
     const paymentRequestId = searchParams.get("payment_request_id");
     const paymentStatus = searchParams.get("payment_status");
 
-    console.log("Payment success handler:", {
-      paymentId,
-      paymentRequestId,
-      paymentStatus,
-    });
+    // console.log("Payment success handler:", {
+    //   paymentId,
+    //   paymentRequestId,
+    //   paymentStatus,
+    // });
 
     const db = await getDb();
 
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log("Booking found:", booking.booking_id);
+    // console.log("Booking found:", booking.booking_id);
 
     // Instamojo uses "Credit" for successful payments
     if (paymentStatus === "Credit") {
@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
           gst_number: booking.gst_number,
         });
 
-        console.log(`Confirmation email sent for ${booking.booking_id}`);
+        // console.log(`Confirmation email sent for ${booking.booking_id}`);
       } catch (emailError) {
         console.error("Email error:", emailError);
       }

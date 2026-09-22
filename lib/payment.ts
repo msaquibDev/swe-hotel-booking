@@ -103,15 +103,15 @@ export async function initiatePayment({
   formData.append("send_sms", "false");
   formData.append("allow_repeated_payments", "false");
 
-  console.log("Initiating payment with Instamojo:", {
-    purpose: description,
-    amount: amount.toString(),
-    buyer_name: customerName,
-    email: customerEmail,
-    phone: customerPhone,
-    redirect_url: redirectUrl,
-    webhook_url: webhookUrl,
-  });
+  // console.log("Initiating payment with Instamojo:", {
+  //   purpose: description,
+  //   amount: amount.toString(),
+  //   buyer_name: customerName,
+  //   email: customerEmail,
+  //   phone: customerPhone,
+  //   redirect_url: redirectUrl,
+  //   webhook_url: webhookUrl,
+  // });
 
   const response = await fetch(`${INSTAMOJO_API_URL}/payment-requests/`, {
     method: "POST",
@@ -126,7 +126,7 @@ export async function initiatePayment({
 
   const responseText = await response.text();
 
-  console.log("Instamojo response:", responseText);
+  // console.log("Instamojo response:", responseText);
 
   if (!response.ok) {
     console.error("Payment initiation failed:", responseText);
@@ -161,12 +161,12 @@ export async function initiatePayment({
     },
   );
 
-  console.log("Booking payment request saved:", {
-    bookingId,
-    paymentRequestId,
-    matched: updateResult.matchedCount,
-    modified: updateResult.modifiedCount,
-  });
+  // console.log("Booking payment request saved:", {
+  //   bookingId,
+  //   paymentRequestId,
+  //   matched: updateResult.matchedCount,
+  //   modified: updateResult.modifiedCount,
+  // });
 
   if (updateResult.matchedCount === 0) {
     throw new Error(

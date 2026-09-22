@@ -13,17 +13,17 @@ export async function POST(request: NextRequest) {
       data[key] = value.toString();
     });
 
-    console.log("Payment callback received:", data);
+    // console.log("Payment callback received:", data);
 
     const paymentId = data.payment_id;
     const paymentRequestId = data.payment_request_id;
     const status = data.status;
 
-    console.log("Payment details:", {
-      paymentId,
-      paymentRequestId,
-      status,
-    });
+    // console.log("Payment details:", {
+    //   paymentId,
+    //   paymentRequestId,
+    //   status,
+    // });
 
     if (!paymentRequestId) {
       return NextResponse.json(
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
         },
       );
 
-      console.log(`Booking ${booking.booking_id} payment successful`);
+      // console.log(`Booking ${booking.booking_id} payment successful`);
     } else if (status === "Failed") {
       await db.collection("bookings").updateOne(
         { _id: booking._id },
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         },
       );
 
-      console.log(`Booking ${booking.booking_id} payment failed`);
+      // console.log(`Booking ${booking.booking_id} payment failed`);
     }
 
     return NextResponse.json({ success: true });

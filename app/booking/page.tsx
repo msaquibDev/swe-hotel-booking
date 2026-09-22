@@ -201,7 +201,7 @@ function BookingPageContent() {
         total_amount: totalAmount,
       };
 
-      console.log("Booking data:", bookingData);
+      // console.log("Booking data:", bookingData);
 
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/payment/initiate`,

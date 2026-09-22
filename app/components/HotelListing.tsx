@@ -27,7 +27,7 @@ export default function HotelListing() {
       try {
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/hotel`);
         const data = await res.json();
-        console.log("Fetched hotels:", data);
+        // console.log("Fetched hotels:", data);
         setHotels(data);
       } catch (error) {
         console.error("Error fetching hotels:", error);
@@ -45,7 +45,7 @@ export default function HotelListing() {
 
     // venue distance = last element in distances[] (e.g., "2 Kms away from the venue")
     const venueDistance = hotel.distances.find((d) =>
-      d.toLowerCase().includes("venue")
+      d.toLowerCase().includes("venue"),
     );
     const distanceValue = venueDistance
       ? parseFloat(venueDistance.split(" ")[0])

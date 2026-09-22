@@ -72,7 +72,7 @@ export async function sendEmail({
       return false;
     }
 
-    console.log(`Email sent to ${to}:`, responseText);
+    // console.log(`Email sent to ${to}:`, responseText);
     return true;
   } catch (error) {
     console.error("Failed to send email:", error);

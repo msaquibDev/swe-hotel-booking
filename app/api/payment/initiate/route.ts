@@ -115,11 +115,11 @@ export async function POST(request: NextRequest) {
       redirectUrl,
     });
 
-    console.log("Payment initiated successfully:", {
-      bookingId,
-      paymentRequestId,
-      paymentUrl,
-    });
+    // console.log("Payment initiated successfully:", {
+    //   bookingId,
+    //   paymentRequestId,
+    //   paymentUrl,
+    // });
 
     return NextResponse.json({
       success: true,
