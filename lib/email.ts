@@ -44,7 +44,7 @@ export async function sendEmail({
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        Authorization: process.env.ZEPTO_TOKEN!,
+        Authorization: `Zoho-enczapikey ${process.env.ZEPTO_TOKEN}`,
       },
       body: JSON.stringify({
         from: {

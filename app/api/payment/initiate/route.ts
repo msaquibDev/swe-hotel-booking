@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Validate hotel exists
+    // Validate hotel ID
     if (!ObjectId.isValid(body.hotel)) {
       return NextResponse.json(
         { message: "Invalid hotel ID" },
@@ -44,9 +44,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const hotel = await db
-      .collection("hotels")
-      .findOne({ _id: new ObjectId(body.hotel) });
+    // Find hotel
+    const hotel = await db.collection("hotels").findOne({
+      _id: new ObjectId(body.hotel),
+    });
 
     if (!hotel) {
       return NextResponse.json({ message: "Hotel not found" }, { status: 404 });
@@ -54,56 +55,84 @@ export async function POST(request: NextRequest) {
 
     // Generate booking ID
     const timestamp = Date.now().toString(36).toUpperCase();
+
     const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+
     const bookingId = `BK${timestamp}${random}`;
 
-    // Create booking record
+    // Create booking
     const booking = {
       booking_id: bookingId,
       hotel: new ObjectId(body.hotel),
+
       title: body.title,
       first_name: body.first_name,
       middle_name: body.middle_name || "",
       last_name: body.last_name,
       gender: body.gender,
+
       email: body.email,
       mobile: body.mobile,
+
       address: body.address,
       state: body.state,
+
       company_name: body.company_name,
       gst_number: body.gst_number || "",
+
       check_in_date: body.check_in_date,
       check_out_date: body.check_out_date,
       room_type: body.room_type,
+
       total_amount: body.total_amount,
+
+      // Payment starts as pending
       payment_status: "pending",
+
       created_at: new Date(),
       updated_at: new Date(),
     };
 
-    const result = await db.collection("bookings").insertOne(booking);
+    await db.collection("bookings").insertOne(booking);
 
-    // Initiate payment with Instamojo
+    // Instamojo redirects customer here after payment
     const redirectUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/payment/success`;
 
-    const { paymentUrl, paymentId } = await initiatePayment({
+    // Initiate Instamojo payment
+    const { paymentUrl, paymentRequestId } = await initiatePayment({
       bookingId,
+
       amount: body.total_amount,
+
       customerName: `${body.first_name} ${body.last_name}`,
+
       customerEmail: body.email,
+
       customerPhone: body.mobile,
+
       description: `Hotel Booking - ${hotel.hotel_name} - ${bookingId}`,
+
       redirectUrl,
+    });
+
+    console.log("Payment initiated successfully:", {
+      bookingId,
+      paymentRequestId,
+      paymentUrl,
     });
 
     return NextResponse.json({
       success: true,
       booking_id: bookingId,
+
       payment_url: paymentUrl,
-      payment_id: paymentId,
+
+      // This is the Instamojo PAYMENT REQUEST ID
+      payment_request_id: paymentRequestId,
     });
   } catch (error) {
     console.error("Payment initiation error:", error);
+
     return NextResponse.json(
       {
         message:

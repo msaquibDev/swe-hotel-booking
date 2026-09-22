@@ -22,10 +22,10 @@ interface InstamojoPaymentResponse {
     amount: string;
     purpose: string;
     status: string;
-    shorturl: string;
+    shorturl: string | null;
     longurl: string;
     redirect_url: string;
-    webhook_url: string;
+    webhook_url: string | null;
     created_at: string;
     modified_at: string;
   };
@@ -33,14 +33,11 @@ interface InstamojoPaymentResponse {
 
 /**
  * Generate hash for Instamojo payment verification
- * Format: sha1(private_salt + data_string)
  */
 export function generateInstamojoHash(data: Record<string, string>): string {
-  // Sort keys alphabetically and create data string
   const sortedKeys = Object.keys(data).sort();
   const dataString = sortedKeys.map((key) => data[key]).join("|");
 
-  // Generate SHA1 hash with salt
   const hash = crypto
     .createHash("sha1")
     .update(process.env.INSTAMOJO_PRIVATE_SALT + "|" + dataString)
@@ -57,9 +54,13 @@ export function verifyInstamojoWebhookHash(
   receivedHash: string,
 ): boolean {
   const calculatedHash = generateInstamojoHash(data);
+
   return calculatedHash === receivedHash;
 }
 
+/**
+ * Initiate Instamojo payment
+ */
 export async function initiatePayment({
   bookingId,
   amount,
@@ -68,15 +69,29 @@ export async function initiatePayment({
   customerPhone,
   description,
   redirectUrl,
-}: PaymentInitiateParams): Promise<{ paymentUrl: string; paymentId: string }> {
+}: PaymentInitiateParams): Promise<{
+  paymentUrl: string;
+  paymentRequestId: string;
+}> {
   const INSTAMOJO_API_URL =
     process.env.INSTAMOJO_API_URL || "https://www.instamojo.com/api/1.1";
-  const INSTAMOJO_API_KEY = process.env.INSTAMOJO_PRIVATE_API_KEY!;
-  const INSTAMOJO_AUTH_TOKEN = process.env.INSTAMOJO_PRIVATE_AUTH_TOKEN!;
+
+  const INSTAMOJO_API_KEY = process.env.INSTAMOJO_PRIVATE_API_KEY;
+
+  const INSTAMOJO_AUTH_TOKEN = process.env.INSTAMOJO_PRIVATE_AUTH_TOKEN;
+
+  if (!INSTAMOJO_API_KEY) {
+    throw new Error("INSTAMOJO_PRIVATE_API_KEY is missing");
+  }
+
+  if (!INSTAMOJO_AUTH_TOKEN) {
+    throw new Error("INSTAMOJO_PRIVATE_AUTH_TOKEN is missing");
+  }
 
   const webhookUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/payment/callback`;
 
   const formData = new URLSearchParams();
+
   formData.append("purpose", description);
   formData.append("amount", amount.toString());
   formData.append("buyer_name", customerName);
@@ -104,15 +119,18 @@ export async function initiatePayment({
       "X-Api-Key": INSTAMOJO_API_KEY,
       "X-Auth-Token": INSTAMOJO_AUTH_TOKEN,
       "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
     },
     body: formData.toString(),
   });
 
   const responseText = await response.text();
+
   console.log("Instamojo response:", responseText);
 
   if (!response.ok) {
     console.error("Payment initiation failed:", responseText);
+
     throw new Error(`Payment initiation failed: ${responseText}`);
   }
 
@@ -122,22 +140,43 @@ export async function initiatePayment({
     throw new Error("Payment request was not successful");
   }
 
-  // Update booking with payment URL and ID
+  const paymentRequestId = data.payment_request.id;
+
+  const paymentUrl = data.payment_request.longurl;
+
+  // Save PAYMENT REQUEST ID separately.
+  // This is NOT the actual payment ID.
   const db = await getDb();
-  await db.collection("bookings").updateOne(
-    { booking_id: bookingId },
+
+  const updateResult = await db.collection("bookings").updateOne(
+    {
+      booking_id: bookingId,
+    },
     {
       $set: {
-        payment_id: data.payment_request.id,
-        payment_url: data.payment_request.longurl,
+        payment_request_id: paymentRequestId,
+        payment_url: paymentUrl,
         updated_at: new Date(),
       },
     },
   );
 
+  console.log("Booking payment request saved:", {
+    bookingId,
+    paymentRequestId,
+    matched: updateResult.matchedCount,
+    modified: updateResult.modifiedCount,
+  });
+
+  if (updateResult.matchedCount === 0) {
+    throw new Error(
+      `Booking not found while saving payment request: ${bookingId}`,
+    );
+  }
+
   return {
-    paymentUrl: data.payment_request.longurl,
-    paymentId: data.payment_request.id,
+    paymentUrl,
+    paymentRequestId,
   };
 }
 
@@ -157,11 +196,21 @@ export async function verifyPaymentStatus(
 }> {
   const INSTAMOJO_API_URL =
     process.env.INSTAMOJO_API_URL || "https://www.instamojo.com/api/1.1";
-  const INSTAMOJO_API_KEY = process.env.INSTAMOJO_PRIVATE_API_KEY!;
-  const INSTAMOJO_AUTH_TOKEN = process.env.INSTAMOJO_PRIVATE_AUTH_TOKEN!;
+
+  const INSTAMOJO_API_KEY = process.env.INSTAMOJO_PRIVATE_API_KEY;
+
+  const INSTAMOJO_AUTH_TOKEN = process.env.INSTAMOJO_PRIVATE_AUTH_TOKEN;
+
+  if (!INSTAMOJO_API_KEY) {
+    throw new Error("INSTAMOJO_PRIVATE_API_KEY is missing");
+  }
+
+  if (!INSTAMOJO_AUTH_TOKEN) {
+    throw new Error("INSTAMOJO_PRIVATE_AUTH_TOKEN is missing");
+  }
 
   try {
-    // First, get the payment request details
+    // Get payment request details
     const paymentRequestResponse = await fetch(
       `${INSTAMOJO_API_URL}/payment-requests/${paymentRequestId}/`,
       {
@@ -169,17 +218,20 @@ export async function verifyPaymentStatus(
         headers: {
           "X-Api-Key": INSTAMOJO_API_KEY,
           "X-Auth-Token": INSTAMOJO_AUTH_TOKEN,
+          Accept: "application/json",
         },
       },
     );
 
     if (!paymentRequestResponse.ok) {
-      throw new Error("Failed to fetch payment request");
+      const errorText = await paymentRequestResponse.text();
+
+      throw new Error(`Failed to fetch payment request: ${errorText}`);
     }
 
     const paymentRequestData = await paymentRequestResponse.json();
 
-    // Then, get the specific payment details
+    // Get actual payment details
     const paymentResponse = await fetch(
       `${INSTAMOJO_API_URL}/payments/${paymentId}/`,
       {
@@ -187,12 +239,15 @@ export async function verifyPaymentStatus(
         headers: {
           "X-Api-Key": INSTAMOJO_API_KEY,
           "X-Auth-Token": INSTAMOJO_AUTH_TOKEN,
+          Accept: "application/json",
         },
       },
     );
 
     if (!paymentResponse.ok) {
-      throw new Error("Failed to fetch payment details");
+      const errorText = await paymentResponse.text();
+
+      throw new Error(`Failed to fetch payment details: ${errorText}`);
     }
 
     const paymentData = await paymentResponse.json();
@@ -207,6 +262,7 @@ export async function verifyPaymentStatus(
     };
   } catch (error) {
     console.error("Payment verification error:", error);
+
     throw error;
   }
 }
