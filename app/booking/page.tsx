@@ -1,6 +1,7 @@
+// app/booking/page.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -18,12 +19,18 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { MapPin, Calendar, CreditCard, Star, Home } from "lucide-react";
+import {
+  MapPin,
+  Calendar,
+  CreditCard,
+  Star,
+  Home,
+  Loader2,
+} from "lucide-react";
 import Link from "next/link";
 import { indianStates } from "@/lib/indian-states";
 import { BookingFormData } from "@/types/booking";
 import { useSearchParams } from "next/navigation";
-// import { hotels } from "@/data/hotels"; // make sure this is imported
 import { Hotel } from "@/types/hotel";
 
 const bookingSchema = z.object({
@@ -43,7 +50,11 @@ const bookingSchema = z.object({
     errorMap: () => ({ message: "Please select a gender" }),
   }),
   email: z.string().email("Invalid email address"),
-  mobile: z.string().min(10, "Mobile number must be at least 10 digits"),
+  mobile: z
+    .string()
+    .min(10, "Mobile number must be 10 digits")
+    .max(10, "Mobile number must be 10 digits")
+    .regex(/^[0-9]+$/, "Only numbers allowed"),
   address: z.string().min(1, "Address is required"),
   state: z.string().min(1, "Please select a state"),
   companyName: z.string().min(1, "Company name is required"),
@@ -56,18 +67,19 @@ const bookingSchema = z.object({
     .refine((val) => val === true, "You must agree to the booking policy"),
 });
 
-export default function BookingPage() {
+function BookingPageContent() {
   const [checkinDate, setCheckinDate] = useState<Date>();
   const [checkoutDate, setCheckoutDate] = useState<Date>();
   const [roomType, setRoomType] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hotel, setHotel] = useState<Hotel | null>(null);
-  console.log("Hotel data in booking page:", hotel);
+  const [isLoadingHotel, setIsLoadingHotel] = useState(true);
   const [isScrolled, setIsScrolled] = useState(false);
 
   const searchParams = useSearchParams();
   const hotelId = searchParams.get("hotel");
 
+  // Handle scroll for floating home button
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 100);
@@ -76,6 +88,7 @@ export default function BookingPage() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Format date as YYYY-MM-DD (local timezone safe)
   const formatDateYYYYMMDD = (date: Date): string => {
     const day = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -83,14 +96,27 @@ export default function BookingPage() {
     return `${year}-${month}-${day}`;
   };
 
+  // Fetch hotel details
   useEffect(() => {
-    if (!hotelId) return;
+    if (!hotelId) {
+      setIsLoadingHotel(false);
+      return;
+    }
 
-    // Fetch hotel dynamically from your API or local data
+    setIsLoadingHotel(true);
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/hotel/${hotelId}`)
-      .then((res) => res.json())
-      .then((data: Hotel) => setHotel(data))
-      .catch((err) => console.error("Failed to fetch hotel:", err));
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch hotel");
+        return res.json();
+      })
+      .then((data: Hotel) => {
+        setHotel(data);
+        setIsLoadingHotel(false);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch hotel:", err);
+        setIsLoadingHotel(false);
+      });
   }, [hotelId]);
 
   const {
@@ -102,49 +128,57 @@ export default function BookingPage() {
   } = useForm<BookingFormData>({
     resolver: zodResolver(bookingSchema),
     defaultValues: {
-      roomType: "single",
+      roomType: "",
     },
   });
 
-  const watchedValues = watch();
-
+  // Selected room details
   const selectedRoom = React.useMemo(() => {
     if (!hotel || !roomType) return null;
-
     return hotel.room_types?.find((room) => room.name === roomType) || null;
   }, [hotel, roomType]);
 
-  const totalAmount = React.useMemo(() => {
-    if (!selectedRoom) return 0;
-
-    if (checkinDate && checkoutDate) {
-      const nights = Math.ceil(
+  // Calculate number of nights
+  const numberOfNights = React.useMemo(() => {
+    if (!checkinDate || !checkoutDate) return 0;
+    return Math.max(
+      0,
+      Math.ceil(
         (checkoutDate.getTime() - checkinDate.getTime()) /
           (1000 * 60 * 60 * 24),
-      );
+      ),
+    );
+  }, [checkinDate, checkoutDate]);
 
-      return nights * selectedRoom.price;
+  // Calculate total amount
+  const totalAmount = React.useMemo(() => {
+    if (!selectedRoom) return 0;
+    if (numberOfNights > 0) {
+      return numberOfNights * selectedRoom.price;
     }
-
     return selectedRoom.price;
-  }, [checkinDate, checkoutDate, selectedRoom]);
+  }, [selectedRoom, numberOfNights]);
 
-  // ADD THIS ONSUBMIT FUNCTION
+  // Submit handler
   const onSubmit = async (data: BookingFormData) => {
     if (!hotel) {
       alert("Hotel information not loaded. Please try again.");
       return;
     }
 
+    if (!checkinDate || !checkoutDate) {
+      alert("Please select check-in and check-out dates.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      // Prepare booking data according to API requirements
-      const selectedRoom = hotel.room_types.find(
+      const selectedRoomData = hotel.room_types.find(
         (room) => room.name === roomType,
       );
 
-      if (!selectedRoom) {
+      if (!selectedRoomData) {
         throw new Error("Please select a valid room type");
       }
 
@@ -154,20 +188,21 @@ export default function BookingPage() {
         first_name: data.firstName,
         middle_name: data.middleName || "",
         last_name: data.lastName,
-        gender: data.gender.charAt(0).toUpperCase() + data.gender.slice(1), // Capitalize first letter
+        gender: data.gender,
         email: data.email,
         mobile: data.mobile,
         state: data.state,
         company_name: data.companyName,
         gst_number: data.gst || "",
         address: data.address,
-        check_in_date: checkinDate ? formatDateYYYYMMDD(checkinDate) : "",
-        check_out_date: checkoutDate ? formatDateYYYYMMDD(checkoutDate) : "",
-        room_type: selectedRoom.name,
+        check_in_date: formatDateYYYYMMDD(checkinDate),
+        check_out_date: formatDateYYYYMMDD(checkoutDate),
+        room_type: selectedRoomData.name,
         total_amount: totalAmount,
       };
-      console.log("Booking data.......", bookingData);
-      // Call the payment initiation endpoint
+
+      console.log("Booking data:", bookingData);
+
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/payment/initiate`,
         {
@@ -181,7 +216,7 @@ export default function BookingPage() {
 
       const result = await response.json();
 
-      if (response.ok) {
+      if (response.ok && result.payment_url) {
         // Redirect to Instamojo payment page
         window.location.href = result.payment_url;
       } else {
@@ -189,16 +224,25 @@ export default function BookingPage() {
       }
     } catch (error) {
       console.error("Booking submission error:", error);
-      alert("Failed to process booking. Please try again.");
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to process booking. Please try again.",
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // Generate array of dates between start and end
   const generateDates = (start: Date, end: Date): Date[] => {
-    const dates = [];
-    let current = new Date(start);
-    while (current <= end) {
+    const dates: Date[] = [];
+    const current = new Date(start);
+    current.setHours(0, 0, 0, 0);
+    const endDate = new Date(end);
+    endDate.setHours(0, 0, 0, 0);
+
+    while (current <= endDate) {
       dates.push(new Date(current));
       current.setDate(current.getDate() + 1);
     }
@@ -214,13 +258,58 @@ export default function BookingPage() {
 
   const getAvailableCheckoutDates = (checkin?: Date) => {
     if (!hotel || !checkin) return [];
-    const start =
-      checkin > new Date(hotel.checkout_start_date)
-        ? checkin
-        : new Date(hotel.checkout_start_date);
+
+    const checkoutStart = new Date(hotel.checkout_start_date);
+    checkoutStart.setHours(0, 0, 0, 0);
+
+    const checkinNormalized = new Date(checkin);
+    checkinNormalized.setHours(0, 0, 0, 0);
+
+    // Checkout must be at least 1 day after check-in
+    const minCheckout = new Date(checkinNormalized);
+    minCheckout.setDate(minCheckout.getDate() + 1);
+
+    const start = minCheckout > checkoutStart ? minCheckout : checkoutStart;
     const end = new Date(hotel.checkout_end_date);
+
     return generateDates(start, end);
   };
+
+  // Loading state
+  if (isLoadingHotel) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading hotel details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Hotel not found
+  if (!hotel && !isLoadingHotel && hotelId) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center">
+        <Card className="max-w-md mx-4">
+          <CardContent className="p-8 text-center">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">
+              Hotel Not Found
+            </h2>
+            <p className="text-gray-600 mb-6">
+              The hotel you're looking for is not available.
+            </p>
+            <Link href="/">
+              <Button className="bg-gradient-to-r from-blue-600 to-purple-700">
+                <Home className="mr-2 h-4 w-4" />
+                Go to Homepage
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
@@ -296,7 +385,8 @@ export default function BookingPage() {
             <div className="h-64 relative">
               <iframe
                 src={`https://maps.google.com/maps?q=${encodeURIComponent(
-                  `${hotel?.hotel_name}, ${hotel?.address}` || "Hotel Location",
+                  `${hotel?.hotel_name || ""}, ${hotel?.address || ""}` ||
+                    "Hotel Location",
                 )}&z=15&output=embed`}
                 className="w-full h-full border-0"
                 loading="lazy"
@@ -428,9 +518,8 @@ export default function BookingPage() {
                     pattern="[0-9]*"
                     {...register("mobile")}
                     className={errors.mobile ? "border-red-500" : ""}
-                    placeholder="Enter mobile number"
+                    placeholder="Enter 10-digit mobile number"
                   />
-
                   {errors.mobile && (
                     <p className="text-red-500 text-sm">
                       {errors.mobile.message}
@@ -517,19 +606,22 @@ export default function BookingPage() {
                         setCheckinDate(date);
                         setValue(
                           "checkinDate",
-                          date?.toISOString().split("T")[0] || "",
+                          date ? formatDateYYYYMMDD(date) : "",
                         );
+                        // Reset checkout when checkin changes
                         setCheckoutDate(undefined);
                         setValue("checkoutDate", "");
                       }}
                       placeholder="Select check-in date"
-                      disabled={(date) =>
-                        !availableCheckinDates.some(
-                          (d) => d.toDateString() === date.toDateString(),
-                        )
-                      }
+                      disabled={(date) => {
+                        const d = new Date(date);
+                        d.setHours(0, 0, 0, 0);
+                        return !availableCheckinDates.some(
+                          (allowed) =>
+                            allowed.toDateString() === d.toDateString(),
+                        );
+                      }}
                     />
-
                     {errors.checkinDate && (
                       <p className="text-red-500 text-sm">
                         {errors.checkinDate.message}
@@ -545,19 +637,22 @@ export default function BookingPage() {
                         setCheckoutDate(date);
                         setValue(
                           "checkoutDate",
-                          date?.toISOString().split("T")[0] || "",
+                          date ? formatDateYYYYMMDD(date) : "",
                         );
                       }}
                       placeholder="Select check-out date"
                       disabled={(date) => {
+                        if (!checkinDate) return true;
+                        const d = new Date(date);
+                        d.setHours(0, 0, 0, 0);
                         const allowedDates =
                           getAvailableCheckoutDates(checkinDate);
                         return !allowedDates.some(
-                          (d) => d.toDateString() === date.toDateString(),
+                          (allowed) =>
+                            allowed.toDateString() === d.toDateString(),
                         );
                       }}
                     />
-
                     {errors.checkoutDate && (
                       <p className="text-red-500 text-sm">
                         {errors.checkoutDate.message}
@@ -633,14 +728,6 @@ export default function BookingPage() {
                     </p>
                   )}
                 </div>
-
-                {/* Inventory Info */}
-                {/* <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-4">
-                  <div className="flex items-center space-x-2">
-                    <Shield className="h-5 w-5 text-green-600" />
-                    <span className="font-medium text-green-800">30 rooms available</span>
-                  </div>
-                </div> */}
               </div>
 
               {/* Booking Policy */}
@@ -657,7 +744,9 @@ export default function BookingPage() {
                     <Checkbox
                       id="agreeToPolicy"
                       onCheckedChange={(checked) =>
-                        setValue("agreeToPolicy", checked as boolean)
+                        setValue("agreeToPolicy", checked as boolean, {
+                          shouldValidate: true,
+                        })
                       }
                     />
                     <Label
@@ -677,36 +766,17 @@ export default function BookingPage() {
 
               {/* Total Amount */}
               <div className="bg-gradient-to-r from-blue-600 to-purple-700 text-white rounded-lg p-6">
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center flex-wrap gap-4">
                   <div>
                     <h3 className="text-xl font-semibold">Total Amount</h3>
-                    <p className="opacity-90">
-                      {checkinDate && checkoutDate ? (
-                        <>
-                          {`${Math.ceil(
-                            (checkoutDate.getTime() - checkinDate.getTime()) /
-                              (1000 * 60 * 60 * 24),
-                          )} night(s) × ₹${(
-                            <p className="opacity-90">
-                              {checkinDate && checkoutDate && selectedRoom ? (
-                                <>
-                                  {`${Math.ceil(
-                                    (checkoutDate.getTime() -
-                                      checkinDate.getTime()) /
-                                      (1000 * 60 * 60 * 24),
-                                  )} night(s) × ₹${selectedRoom.price}`}
-                                </>
-                              ) : selectedRoom ? (
-                                `₹${selectedRoom.price} per night`
-                              ) : (
-                                "Select room and dates for calculation"
-                              )}
-                            </p>
-                          )}`}
-                        </>
-                      ) : (
-                        "Select dates for calculation"
-                      )}
+                    <p className="opacity-90 text-sm mt-1">
+                      {checkinDate && checkoutDate && selectedRoom
+                        ? `${numberOfNights} night${
+                            numberOfNights > 1 ? "s" : ""
+                          } × ₹${selectedRoom.price}`
+                        : selectedRoom
+                          ? `₹${selectedRoom.price} per night — select dates`
+                          : "Select a room and dates to calculate"}
                     </p>
                   </div>
                   <div className="text-right">
@@ -722,7 +792,10 @@ export default function BookingPage() {
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
-                  "Processing..."
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Processing...
+                  </>
                 ) : (
                   <>
                     <CreditCard className="mr-2 h-5 w-5" />
@@ -735,5 +808,23 @@ export default function BookingPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+// Main export with Suspense wrapper (required for useSearchParams in Next.js 14+)
+export default function BookingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      }
+    >
+      <BookingPageContent />
+    </Suspense>
   );
 }
